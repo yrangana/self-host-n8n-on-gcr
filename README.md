@@ -275,7 +275,9 @@ To connect n8n with Google services like Google Sheets, follow these steps:
 
     * Add test users if using External type
 
-    * For scopes, add the basic "/auth/userinfo.email" and "/auth/userinfo.profile"
+    * For scopes, for now add the following:
+        * `https://googleapis.com/auth/drive.file`
+        * `https://googleapis.com/auth/spreadsheets`
 
 4. Create OAuth Client ID:
 
