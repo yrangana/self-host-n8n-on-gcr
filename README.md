@@ -398,7 +398,7 @@ Regular updates keep your instance secure and give you access to new nodes and f
 
 ## Cost Estimates: Yes, It Really Can Be That Cheap ##
 
-Let's talk money. One of the main reasons to use this setup is cost efficiency. Here's what you can expect to pay monthly:
+Let's talk money. One of the main reasons to use this setup is cost efficiency. This way of self-hosting is cheaper than the much more documented Kubernetes approach, and at most, half the price of n8n's lowest paid tier. Here's what you can expect to pay monthly:
 
 **Google Cloud SQL (db-f1-micro)**: About £7.50 ($10.95) if running constantly. This is your main cost driver - a basic PostgreSQL instance that's plenty powerful for personal use.
 
@@ -414,7 +414,7 @@ With our configuration setting min-instances=0, your n8n container shuts down co
 
 **Secret Manager, Artifact Registry**, etc.: These additional services all have free tiers that you'll likely stay within.
 
-**Total expected monthly cost**: £2-£10 ($2.50-$13)
+**Total expected monthly cost**: £2-£12
 
 The beauty of this setup is that costs scale with usage. If you're just running a few workflows that trigger occasionally, you'll stay at the lower end. If you're constantly hammering the system with heavy workflows, you might go beyond the free tier and see costs rise.
 
