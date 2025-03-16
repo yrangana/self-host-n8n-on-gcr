@@ -400,7 +400,7 @@ Regular updates keep your instance secure and give you access to new nodes and f
 
 Let's talk money. One of the main reasons to use this setup is cost efficiency. This way of self-hosting is cheaper than the much more documented Kubernetes approach, and at most, half the price of n8n's lowest paid tier. Here's what you can expect to pay monthly:
 
-**Google Cloud SQL (db-f1-micro)**: About £7.50 ($10.95) if running constantly. This is your main cost driver - a basic PostgreSQL instance that's plenty powerful for personal use.
+**Google Cloud SQL (db-f1-micro)**: About £8.00 if running constantly. This is your main cost driver - a basic PostgreSQL instance that's plenty powerful for personal use.
 
 **Google Cloud Run**: Practically free for light usage thanks to the generous free tier:
 
