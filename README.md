@@ -1,38 +1,38 @@
 # Self-Hosting n8n on Google Cloud Run: Complete Guide #
 
-This guide will walk you through the process of self-hosting n8n.io on Google Cloud Run with PostgreSQL persistence and setting up Google OAuth credentials for services like Google Sheets.
+So you want to run n8n without the monthly subscription fees, keep your data under your own control, and avoid the headache of server maintenance? Google Cloud Run offers exactly that sweet spot - serverless deployment with per-use pricing. Let's build this thing properly.
 
-By following this guide, you'll have a fully functional n8n instance running on Google Cloud Run with PostgreSQL persistence and the ability to connect to Google services via OAuth.
+This guide walks you through deploying n8n (that powerful workflow automation platform) on Google Cloud Run with PostgreSQL persistence. You'll end up with a fully functional system that scales automatically, connects to Google services via OAuth, and won't drain your wallet when idle.
 
 ## Overview ##
 
-n8n is a powerful workflow automation platform that can be self-hosted. This guide uses:
+n8n is brilliant for automating all those tedious tasks you'd rather not do manually. This setup uses:
 
-* [Google Cloud Run](https://cloud.google.com/run?hl=en) for serverless container hosting
+* Google Cloud Run for hosting the application (pay only when it runs)
 
-* [Cloud SQL PostgreSQL](https://cloud.google.com/sql/docs/postgres) for database persistence
+* Cloud SQL PostgreSQL for database persistence (because your workflows should survive restarts)
 
-* [Google Auth Platform](https://support.google.com/cloud/answer/15544987?hl=en) for connecting to Google services
+* Google Auth Platform for connecting to Google services (sheets, drive, etc.)
 
-Self-hosting n8n gives you complete control over your automation workflows and data. Unlike the cloud version, self-hosting ensures your sensitive workflow data stays within your infrastructure and allows unlimited executions without monthly subscription fees. Google Cloud Run is an ideal hosting platform because it provides serverless scalability while only charging for the resources you actually use.
+Why self-host? Complete control over your automation workflows and data. No arbitrary execution limits. No wondering where your sensitive data is being stored. And with Cloud Run, you get the best of both worlds - the control of self-hosting with the convenience of not having to manage actual servers.
 
 ## Prerequisites ##
 
-Before starting, you'll need:
+Before diving in, make sure you've got:
 
-* A Google Cloud account
+* A Google Cloud account (they offer a generous free tier for new accounts)
 
-* gcloud CLI installed and configured
+* gcloud CLI installed and configured (trust me, it's worth not clicking through web consoles)
 
 * Basic familiarity with Docker and command line
 
 * A domain name (optional, but recommended for production use)
 
-The gcloud CLI is essential as it allows us to script the entire deployment process without using the web console. Docker knowledge is needed because n8n runs as a containerized application, ensuring consistent behavior across different environments. While a custom domain is optional, it's recommended for production use as it provides a consistent endpoint for your workflows, especially important if you're using webhooks from external services.
+The command line approach might seem intimidating at first, but it means we can script the entire deployment process. And when you need to update or recreate your instance, you'll thank yourself for having everything in a reusable format.
 
 ## Step 1: Set Up Your Google Cloud Project ##
 
-First, create and configure your Google Cloud project:
+First, let's get our Google Cloud environment sorted:
 
 ```bash
 # Set your Google Cloud project ID
@@ -52,45 +52,62 @@ gcloud services enable sqladmin.googleapis.com
 gcloud services enable secretmanager.googleapis.com
 ```
 
-These commands establish your project environment and enable the necessary Google Cloud APIs. Artifact Registry stores your Docker images, Cloud Run hosts your containerised application, Cloud SQL provides the database, and Secret Manager securely stores sensitive credentials. Enabling these services upfront prevents deployment errors later in the process.
+These commands establish your project environment and enable the necessary Google Cloud APIs. We're turning on all the services we'll need upfront to avoid those annoying "please enable this API first" errors later.
 
 ## Step 2: Create a Custom Dockerfile and Startup Script for n8n ##
 
-Instead of a minimal Dockerfile, we need to create a custom setup to handle the specific requirements of running n8n on Cloud Run. This involves two files:
+Here's where things get interesting. Cloud Run and n8n have a bit of a disagreement about ports - one expects containers to use a specific `PORT` environment variable, while n8n uses its own system. We need to bridge that gap.
 
-1. `startup.sh` - a startup script
-2. `Dockerfile` - a modified Dockerfile that incorporates this script
+Create these two files in your working directory:
 
-### Why This Custom Setup is Essential ###
+**startup.sh:**
 
-The startup script specifically addresses a key architectural challenge: Google Cloud Run injects its own `PORT` environment variable and expects containers to honour it, while n8n has its own port configuration system. Without this bridge, the two systems would be incompatible.
+```bash
+#!/bin/sh
 
-This customised setup solves several critical issues when running n8n on Cloud Run:
+# Map Cloud Run's PORT to N8N_PORT if it exists
+if [ -n "$PORT" ]; then
+  export N8N_PORT=$PORT
+fi
 
-* **Port Mapping**: Cloud Run injects a PORT environment variable that containers must listen on, but n8n uses N8N_PORT instead. Our startup script bridges this gap by mapping one to the other.
+# Print environment variables for debugging
+echo "Database settings:"
+echo "DB_TYPE: $DB_TYPE"
+echo "DB_POSTGRESDB_HOST: $DB_POSTGRESDB_HOST"
+echo "DB_POSTGRESDB_PORT: $DB_POSTGRESDB_PORT"
+echo "N8N_PORT: $N8N_PORT"
 
-* **Debugging Support**: The script outputs key environment variables, making troubleshooting much easier if deployment issues occur.
+# Start n8n with its original entrypoint
+exec /docker-entrypoint.sh
+```
 
-* **Permission Management**: We temporarily switch to the root user to set permissions on our script, then return to the non-root node user (a security best practice).
+**Dockerfile:**
 
-* **Execution Format**: Using /bin/sh explicitly helps prevent "exec format errors" that commonly occur with scripts created on different operating systems (especially Windows).
+```Dockerfile
+FROM docker.n8n.io/n8nio/n8n:latest
 
-Without this custom setup, n8n would fail to start** properly in Cloud Run, and you would encounter errors like "container failed to start", or "exec format error", or "Cannot GET /".
+# Copy the script and ensure it has proper permissions
+COPY startup.sh /
+USER root
+RUN chmod +x /startup.sh
+USER node
+EXPOSE 5678
 
-This approach maintains compatibility with both n8n's requirements and Cloud Run's serverless container environment.
+# Use shell form to help avoid exec format issues
+ENTRYPOINT ["/bin/sh", "/startup.sh"]
+```
 
-#### Troubleshooting this Step ###
+This custom setup solves the port mismatch problem and helps with debugging. Without it, you'd just see a failed container with no helpful error messages. And yes, that's exactly as frustrating as it sounds.
 
-If you run into issues stemming from this when building the Dockerfile you can try:
+* If you run into problems with this step, check that:
 
-* Check the line endings of `startup.sh` are unix compatible i.e. LF (not CLRF)
-* Ensure the file is executable by running `chmod +x /startup.sh` before building
+* Your `startup.sh` file has Unix-style line endings (LF, not CRLF)
+
+* The file has proper execute permissions
 
 ## Step 3: Set Up a Container Repository ##
 
-Google Artifact Registry provides a secure, private repository for your Docker images with integrated authentication through your Google Cloud account. We specifically build for the linux/amd64 platform to ensure compatibility with Cloud Run's infrastructure, which is particularly important if you're developing on ARM-based systems like M1/M2 Macs.
-
-Create and configure a Google Artifact Registry repository:
+Let's create a place to store our container image:
 
 ```bash
 # Create a repository in Artifact Registry
@@ -107,11 +124,11 @@ docker build --platform linux/amd64 -t $REGION-docker.pkg.dev/$PROJECT_ID/n8n-re
 docker push $REGION-docker.pkg.dev/$PROJECT_ID/n8n-repo/n8n:latest
 ```
 
+We're explicitly building for linux/amd64 because Cloud Run doesn't support ARM architecture. This is particularly important if you're developing on an M1/M2 Mac - Docker will happily build an ARM image by default, which then fails mysteriously when deployed. Ask me how I know.
+
 ## Step 4: Set Up Cloud SQL PostgreSQL Instance ##
 
-We're using the db-f1-micro tier and minimal storage configuration to keep costs low while still providing reliable database service. PostgreSQL is the recommended database for n8n production deployments as it offers better performance and reliability than SQLite (n8n's default). The `ZONAL` availability type is chosen as a cost-effective option for non-critical deployments
-
-Create a PostgreSQL instance and database for n8n:
+Now for the database. We'll use the smallest instance type to keep costs reasonable:
 
 ```bash
 # Create a Cloud SQL instance (lowest cost tier)
@@ -134,11 +151,11 @@ gcloud sql users create n8n-user \
     --password="supersecure-userpassword"
 ```
 
+The db-f1-micro tier is perfect for most personal n8n deployments. I've run hundreds of workflows on this setup without issue. And you can always upgrade later if needed.
+
 ## Step 5: Create Secrets for Sensitive Data ##
 
-Secret Manager is used instead of environment variables for sensitive data like passwords and encryption keys. This separation of configuration from secrets follows security best practices and prevents credentials from appearing in deployment logs or configuration files. The encryption key is particularly important as it protects all credentials stored within your n8n instance.
-
-Store sensitive information like passwords in Secret Manager:
+Never put passwords in your deployment configuration. Let's use Secret Manager instead:
 
 ```bash
 # Create a secret for the database password
@@ -154,11 +171,11 @@ echo -n "your-random-encryption-key" | \
     --replication-policy="automatic"
 ```
 
+That encryption key is particularly important - it protects all the credentials stored in your n8n instance. Make it long, random, and keep it safe. If you lose it, you'll need to reconfigure all your connected services.
+
 ## Step 6: Create a Service Account for Cloud Run ##
 
-Creating a dedicated service account with minimal permissions follows the principle of least privilege (PoLP) - a security best practice that reduces your attack surface. The service account needs specific access to Secret Manager to read your secrets and to Cloud SQL to establish database connections, but doesn't require broader project permissions."
-
-Create and configure a service account for your n8n service:
+Time to set up the identity your n8n instance will use:
 
 ```bash
 # Create a service account
@@ -180,9 +197,11 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
     --role="roles/cloudsql.client"
 ```
 
+Following the principle of least privilege here means your n8n service can access exactly what it needs and nothing more. It's a small thing that makes a big difference to your security posture.
+
 ## Step 7: Deploy to Cloud Run ##
 
-Now deploy n8n to Cloud Run with the correct environment variables:
+The moment of truth - let's deploy n8n:
 
 ```bash
 # Get the connection name for your Cloud SQL instance
@@ -205,54 +224,38 @@ gcloud run deploy n8n \
     --service-account=n8n-service-account@$PROJECT_ID.iam.gserviceaccount.com
 ```
 
-After deployment, Cloud Run will provide a URL for your n8n instance. Note this URL as you'll need it for the OAuth configuration.
+After deployment, Cloud Run will provide a URL for your n8n instance. Note it down - you'll need it for the next steps.
+
+A word on the configuration: setting min-instances to 0 and max-instances to 1 means your service will scale down to nothing when not in use (saving you money) but won't run multiple instances simultaneously (which can cause database conflicts with n8n). The CPU and memory allocation is enough for most workflows without going overboard on cost.
 
 ### n8n Google Cloud Run Environment Variables ###
 
-Below is a comprehensive table of all environment variables used in our n8n deployment on Google Cloud Run:
+Here's what all those environment variables do:
 
 ```md
-|Environment Variable     |Value                        |Description                           |Why It's Needed                                                                                 |
-|-------------------------|-----------------------------|--------------------------------------|------------------------------------------------------------------------------------------------|
-|N8N_PATH                 |/                            |Base path where n8n will be accessible|Defines the root path for all n8n endpoints                                                     |
-|N8N_PORT                 |443                          |External port for n8n                 |Set to 443 for proper OAuth callback URL generation (despite internal container port being 5678)|
-|N8N_PROTOCOL             |https                        |Protocol used for external access     |Required for secure connections and OAuth flows                                                 |
-|DB_TYPE                  |postgresdb                   |Database type for n8n                 |Must be exactly "postgresdb" (not postgresql) for proper database connection                    |
-|DB_POSTGRESDB_DATABASE   |n8n                          |Name of the PostgreSQL database       |Specifies which database n8n should connect to                                                  |
-|DB_POSTGRESDB_USER       |n8n-user                     |Database user name                    |Required for database authentication                                                            |
-|DB_POSTGRESDB_HOST       |/cloudsql/[connection-name]  |PostgreSQL connection path            |Uses Cloud SQL Unix socket format for secure connections                                        |
-|DB_POSTGRESDB_PORT       |5432                         |PostgreSQL port                       |Standard PostgreSQL port for connections                                                        |
-|DB_POSTGRESDB_SCHEMA     |public                       |PostgreSQL schema                     |Required for n8n to properly initialize database tables                                         |
-|N8N_USER_FOLDER          |/home/node/.n8n              |Location for n8n data                 |Defines where n8n stores workflow data and credentials                                          |
-|GENERIC_TIMEZONE         |UTC                          |Default timezone                      |Ensures consistent time handling across deployments                                             |
-|EXECUTIONS_PROCESS       |main                         |Execution mode for workflows          |Set to "main" for single-container deployment (vs. queue for multi-container)                   |
-|EXECUTIONS_MODE          |regular                      |How executions are processed          |Controls workflow execution behavior                                                            |
-|N8N_LOG_LEVEL            |debug                        |Logging verbosity                     |Set to debug for troubleshooting deployment issues                                              |
-|QUEUE_HEALTH_CHECK_ACTIVE|true                         |Enables health check endpoint         |Critical for Cloud Run to verify container health                                               |
-|N8N_HOST                 |[your-domain].run.app        |Public hostname of n8n                |Required for proper webhook and OAuth URL generation                                            |
-|N8N_WEBHOOK_URL          |https://[your-domain].run.app|Full webhook URL                      |Needed for external services to call n8n webhooks                                               |
-|N8N_EDITOR_BASE_URL      |https://[your-domain].run.app|Base URL for editor frontend          |Critical for proper OAuth redirect URL generation                                               |
-|DB_POSTGRESDB_PASSWORD   |(from secret)                |Database user password                |Stored securely in Secret Manager                                                               |
-|N8N_ENCRYPTION_KEY       |(from secret)                |Key for encrypting credentials        |Ensures secure storage of sensitive information in the database                                 |
+|    Environment Variable   |            Value            |                                  Description                                 |
+|:-------------------------:|:---------------------------:|:----------------------------------------------------------------------------:|
+| N8N_PATH                  | /                           | Base path where n8n will be accessible                                       |
+| N8N_PORT                  | 443                         | External port (set to 443 for proper OAuth callback URL generation)          |
+| N8N_PROTOCOL              | https                       | Protocol used for external access                                            |
+| DB_TYPE                   | postgresdb                  | Must be exactly "postgresdb" (not postgresql) for proper database connection |
+| DB_POSTGRESDB_DATABASE    | n8n                         | Name of the PostgreSQL database                                              |
+| DB_POSTGRESDB_USER        | n8n-user                    | Database user name                                                           |
+| DB_POSTGRESDB_HOST        | /cloudsql/[connection-name] | PostgreSQL connection path using Cloud SQL Unix socket format                |
+| DB_POSTGRESDB_PORT        | 5432                        | Standard PostgreSQL port                                                     |
+| DB_POSTGRESDB_SCHEMA      | public                      | Required for n8n to properly initialize database tables                      |
+| N8N_USER_FOLDER           | /home/node/.n8n             | Location for n8n data                                                        |
+| GENERIC_TIMEZONE          | UTC                         | Default timezone for consistent time handling                                |
+| EXECUTIONS_PROCESS        | main                        | Set to "main" for single-container deployment                                |
+| EXECUTIONS_MODE           | regular                     | Controls workflow execution behavior                                         |
+| QUEUE_HEALTH_CHECK_ACTIVE | true                        | Critical for Cloud Run to verify container health                            |
 ```
 
-The deployment configuration balances performance and cost-effectiveness. Setting min-instances to 0 allows the service to scale down to zero when not in use (saving money) while setting max-instances to 1 prevents it scaling out of control (and possibly concurrent executions that could cause database conflicts). The CPU and memory allocation provides enough resources for moderate workflow complexity without excessive costs.
-
-#### Special Notes: ####
-
-* The `PORT` variable (5678) shouldn't be explicitly set as it's injected by Cloud Run automatically
-
-* The Cloud Run instance must map the internal container port (5678) to the port specified by Cloud Run
-
-* Setting `N8N_PORT=443` helps generate correct external URLs while the container still listens on 5678 internally
-
-* `QUEUE_HEALTH_CHECK_ACTIVE=true` creates an internal health endpoint that Cloud Run requires to verify container health
-
-This configuration balances n8n's requirements with Google Cloud Run's serverless container environment.
+Pay special attention to DB_TYPE. It must be "postgresdb" not "postgresql" - a quirk that's caused many deployment headaches. And don't explicitly set the PORT variable as Cloud Run injects this automatically.
 
 ## Step 8: Configure n8n for OAuth with Google Services ##
 
-Once your n8n instance is running, you need to update the deployment with additional environment variables for proper OAuth functioning:
+Now we need to update the deployment with environment variables that tell n8n how to properly generate URLs for OAuth callbacks:
 
 ```bash
 # Get your service URL (replace with your actual URL)
@@ -264,50 +267,35 @@ gcloud run services update n8n \
     --set-env-vars="N8N_HOST=$(echo $SERVICE_URL | sed 's/https:\/\///'),N8N_WEBHOOK_URL=$SERVICE_URL,N8N_EDITOR_BASE_URL=$SERVICE_URL"
 ```
 
-These environment variables are crucial for OAuth functionality because they tell n8n how to construct callback URLs during the authentication flow. Without these, OAuth services wouldn't be able to redirect back to your n8n instance correctly after authentication, resulting in 'redirect_uri_mismatch' errors.
+Without these variables, OAuth would fail with utterly unhelpful "redirect_uri_mismatch" errors that make you question your life choices. Setting them correctly means n8n can construct proper callback URLs during authentication flows.
 
 ## Step 9: Set Up Google OAuth Credentials ##
 
-To connect n8n with Google services like Google Sheets, follow these steps:
+Finally, to connect n8n with Google services like Sheets:
 
 1. Access the Google Cloud Console:
-
     * Navigate to the Google Cloud Console
-
     * Select your project
-
 2. Enable Required APIs:
-
     * Go to "APIs & Services" > "Library"
-
     * Search for and enable the APIs you need (e.g., "Google Sheets API", "Google Drive API")
-
 3. Configure OAuth Consent Screen:
-
-    * Go to "APIs & Services" > "OAuth consent screen"
-
+    * Go to "APIs & Services" > "OAuth consent screen
     * Select "External" user type (or "Internal" if using Google Workspace)
-
     * Fill in the required information (App name, user support email, etc.)
-
     * Add test users if using External type
-
     * For scopes, for now add the following:
         * `https://googleapis.com/auth/drive.file`
-        * `https://googleapis.com/auth/spreadsheets`
+        * `https://googleapis.com/auth/spreadsheets
 
     > Note: The OAuth consent screen configuration determines how your application appears to users during authentication. Using 'External' type is necessary for personal projects, but requires adding test users during development. The scopes requested determine what level of access n8n will have to Google services - we request only the minimum necessary for working with Google Sheets.
 
 4. Create OAuth Client ID:
-
     * Go to "APIs & Services" > "Credentials"
-
     * Click "CREATE CREDENTIALS" and select "OAuth client ID"
-
     * Select "Web application" as the application type
-
     * Add your n8n URL to "Authorized JavaScript origins":
-    
+
         ```bash
         https://n8n-YOUR_ID.REGION.run.app
         ```
@@ -321,18 +309,134 @@ To connect n8n with Google services like Google Sheets, follow these steps:
     * Click "CREATE" to generate your client ID and client secret
 
 5. Add Credentials to n8n:
-
     * In your n8n instance, create a new credential for Google Sheets
-
     * Select "OAuth2" as the authentication type
-
     * Copy your OAuth client ID and client secret from Google Cloud Console
-
     * Complete the authentication flow
+
+--- 
+
+## Keeping n8n Updated: Don't Be That Person Running Year-Old Software ##
+
+Updating your n8n deployment is surprisingly straightforward, and it's something you should do regularly to get new features and security patches. Here's how to update when new versions are released:
+
+### Option 1: Rebuild and Redeploy (The Clean Way) ###
+
+```bash
+# Pull the latest n8n image
+docker pull n8nio/n8n:latest
+
+# Rebuild your custom image
+docker build --platform linux/amd64 -t $REGION-docker.pkg.dev/$PROJECT_ID/n8n-repo/n8n:latest .
+
+# Push to your artifact registry
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/n8n-repo/n8n:latest
+
+# Redeploy your Cloud Run service
+gcloud run services update n8n \
+    --image=$REGION-docker.pkg.dev/$PROJECT_ID/n8n-repo/n8n:latest \
+    --region=$REGION
+```
+
+This process typically takes about 2-3 minutes and your n8n instance will experience a brief downtime as Cloud Run swaps over to the new container. Any running workflows will be interrupted, but scheduled triggers will resume once the service is back up.
+
+### Option 2: Specify Versions (The Controlled Way) ###
+
+If you prefer to manage version upgrades more deliberately (recommended for production use), specify the exact n8n version:
+
+```bash
+# Pull a specific version
+docker pull n8nio/n8n:0.230.0  # Replace with your target version
+
+# Update your Dockerfile to use this specific version
+# FROM n8nio/n8n:0.230.0
+
+# Then rebuild and redeploy as above
+```
+
+This approach lets you test new versions before committing to them. Check the n8n GitHub releases page to see what's new before upgrading.
+
+### Database Migrations ###
+
+One of the benefits of using n8n with PostgreSQL is automatic database migrations. When you deploy a new version, n8n will:
+
+1. Detect that the database schema needs updating
+
+2. Run migrations automatically on startup
+
+3. Proceed only when the database is compatible
+
+This means you generally don't need to worry about database changes. However, it's always wise to:
+
+* Back up your database before major version upgrades
+
+* Check the release notes for any breaking changes
+
+* Test upgrades on a staging environment if you have critical workflows
+
+I typically take a snapshot of my Cloud SQL instance before significant version jumps, just in case.
+
+### Updating Environment Variables ###
+
+Sometimes you'll need to update environment variables rather than the container itself:
+
+```bash
+gcloud run services update n8n \
+    --region=$REGION \
+    --set-env-vars="NEW_VARIABLE=value,UPDATED_VARIABLE=new_value"
+```
+
+This is useful when you need to change configuration without rebuilding the container.
+
+### Automation Tip
+
+Create a simple shell script that combines these commands, and you can update your n8n instance with a single command. I keep mine in a private GitHub repo alongside my Dockerfile and startup script, making it easy to maintain and update from anywhere.
+
+Regular updates keep your instance secure and give you access to new nodes and features as they're released. The n8n team typically releases updates every couple of weeks, so checking monthly is a good cadence for most deployments.
+
+---
+
+## Cost Estimates: Yes, It Really Can Be That Cheap ##
+
+Let's talk money. One of the main reasons to use this setup is cost efficiency. Here's what you can expect to pay monthly:
+
+**Google Cloud SQL (db-f1-micro)**: About £7.50 ($10.95) if running constantly. This is your main cost driver - a basic PostgreSQL instance that's plenty powerful for personal use.
+
+**Google Cloud Run**: Practically free for light usage thanks to the generous free tier:
+
+* 2 million requests per month
+
+* 360,000 GB-seconds of memory
+
+* 180,000 vCPU-seconds
+
+With our configuration setting min-instances=0, your n8n container shuts down completely when not in use, costing literally nothing during idle periods. When it runs, it only burns through your free tier allocation.
+
+**Secret Manager, Artifact Registry**, etc.: These additional services all have free tiers that you'll likely stay within.
+
+**Total expected monthly cost**: £2-£10 ($2.50-$13)
+
+The beauty of this setup is that costs scale with usage. If you're just running a few workflows that trigger occasionally, you'll stay at the lower end. If you're constantly hammering the system with heavy workflows, you might go beyond the free tier and see costs rise.
+
+#### How to Keep Costs Down ####
+
+* **Schedule maintenance during off-hours**: If you have workflows that process data in batches, schedule them during times you're not actively using the system.
+
+* **Use webhooks efficiently**: Design workflows that trigger via webhooks rather than constant polling where possible.
+
+* **Monitor your usage**: Google Cloud provides excellent usage dashboards - check them regularly during your first month to understand your consumption patterns.
+
+* **Set budget alerts**: Configure budget alerts in Google Cloud to notify you if spending exceeds your threshold.
+
+What could push costs higher? Running CPU-intensive workflows frequently, storing large amounts of data in PostgreSQL, or configuring your instance with more resources than necessary.
+
+But for most personal automation needs, this setup offers enterprise-level capabilities at coffee-money prices. I've been running this exact configuration for months, and my bill consistently stays under £5 even with dozens of active workflows.
+
+---
 
 ## Troubleshooting ##
 
-When deploying complex systems like n8n on Cloud Run, specific configuration details are critical. Here are solutions to the most common issues you might encounter, based on the exact error messages you'll see:
+When things inevitably go sideways, here are the most common issues and how to fix them:
 
 1. Container Fails to Start:
 
@@ -355,3 +459,5 @@ When deploying complex systems like n8n on Cloud Run, specific configuration det
     * Check `DB_POSTGRESDB_HOST` format for Cloud SQL connections
 
     * Ensure service account has Cloud SQL Client role
+
+And there you have it - a fully functional n8n instance running on Google Cloud Run. You get all the benefits of self-hosting without the headache of managing servers. Your workflows run reliably, your data stays under your control, and you only pay for what you use.
