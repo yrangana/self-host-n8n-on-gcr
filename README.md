@@ -384,7 +384,7 @@ Sometimes you'll need to update environment variables rather than the container 
 ```bash
 gcloud run services update n8n \
     --region=$REGION \
-    --set-env-vars="NEW_VARIABLE=value,UPDATED_VARIABLE=new_value"
+    --update-env-vars="NEW_VARIABLE=value,UPDATED_VARIABLE=new_value"
 ```
 
 This is useful when you need to change configuration without rebuilding the container.
