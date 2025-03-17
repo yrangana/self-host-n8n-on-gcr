@@ -238,6 +238,7 @@ Here's what all those environment variables do:
 | N8N_PATH                  | /                           | Base path where n8n will be accessible                                       |
 | N8N_PORT                  | 443                         | External port (set to 443 for proper OAuth callback URL generation)          |
 | N8N_PROTOCOL              | https                       | Protocol used for external access                                            |
+| N8N_RUNNERS_ENABLED       | true                        | Enables task runners (required for newer n8n versions)                       |
 | DB_TYPE                   | postgresdb                  | Must be exactly "postgresdb" (not postgresql) for proper database connection |
 | DB_POSTGRESDB_DATABASE    | n8n                         | Name of the PostgreSQL database                                              |
 | DB_POSTGRESDB_USER        | n8n-user                    | Database user name                                                           |
@@ -445,6 +446,8 @@ When things inevitably go sideways, here are the most common issues and how to f
     * Verify `DB_TYPE` is set to "postgresdb" (not "postgresql")
 
     * Ensure `QUEUE_HEALTH_CHECK_ACTIVE` is set to "true"
+  
+    * Remove the `EXECUTIONS_PROCESS=main` and `EXECUTIONS_MODE=regular` environment variables as these are now deprecated in newer versions
 
 2. OAuth Redirect Issues:
 
