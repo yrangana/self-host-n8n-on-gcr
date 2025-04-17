@@ -270,6 +270,8 @@ gcloud run services update n8n \
 
 Without these variables, OAuth would fail with utterly unhelpful "redirect_uri_mismatch" errors that make you question your life choices. Setting them correctly means n8n can construct proper callback URLs during authentication flows.
 
+For newer versions of n8n use `WEBHOOK_URL` instead of `N8N_WEBHOOK_URL`.
+
 ## Step 9: Set Up Google OAuth Credentials ##
 
 Finally, to connect n8n with Google services like Sheets:
@@ -462,5 +464,11 @@ When things inevitably go sideways, here are the most common issues and how to f
     * Check `DB_POSTGRESDB_HOST` format for Cloud SQL connections
 
     * Ensure service account has Cloud SQL Client role
+
+4. Node Trigger Issues:
+
+    * Use `WEBHOOK_URL` instead of `N8N_WEBHOOK_URL` for newer n8n versions
+  
+    * Add proxy hop configurations by including `N8N_PROXY_HOPS=1` as Cloud Run acts as a reverse proxy
 
 And there you have it - a fully functional n8n instance running on Google Cloud Run. You get all the benefits of self-hosting without the headache of managing servers. Your workflows run reliably, your data stays under your control, and you only pay for what you use.
