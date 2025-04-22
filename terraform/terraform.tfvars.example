@@ -1,0 +1,22 @@
+# Example terraform.tfvars file
+# Rename this to terraform.tfvars and fill in the sensitive values.
+
+# --- Required --- #
+db_password        = "YOUR_SECURE_DB_PASSWORD"
+n8n_encryption_key = "YOUR_VERY_LONG_RANDOM_ENCRYPTION_KEY"
+
+# --- Optional (Defaults are likely suitable based on your setup) --- #
+# gcp_project_id = "allie-n8n"
+# gcp_region     = "us-west2"
+# db_name        = "n8n"
+# db_user        = "n8n-user"
+# db_tier        = "db-f1-micro"
+# db_storage_size = 10
+# artifact_repo_name = "allie-n8n"
+# cloud_run_service_name = "n8n"
+# service_account_name = "n8n-service-account"
+# cloud_run_cpu = "2"
+# cloud_run_memory = "2Gi"
+# cloud_run_max_instances = 1
+# cloud_run_container_port = 5678
+# generic_timezone = "UTC" 
