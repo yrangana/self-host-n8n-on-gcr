@@ -471,4 +471,18 @@ When things inevitably go sideways, here are the most common issues and how to f
   
     * Add proxy hop configurations by including `N8N_PROXY_HOPS=1` as Cloud Run acts as a reverse proxy
 
+---
+
+## Terraform Deployment Option
+
+Thanks to a generous contribution from the community, there is now a Terraform configuration available to automate the entire deployment process described in this guide. This Terraform setup provisions all necessary Google Cloud resources including Cloud Run, Cloud SQL, Secret Manager, IAM roles, and Artifact Registry.
+
+Using Terraform can simplify and speed up deployment, especially for those familiar with infrastructure as code. The Terraform files and a deployment script are included in the repository.
+
+Huge thanks to [@alliecatowo](https://github.com/alliecatowo) for this valuable addition!
+
+For more details and usage instructions, please see the `terraform/` directory in this repository.
+
+---
+
 And there you have it - a fully functional n8n instance running on Google Cloud Run. You get all the benefits of self-hosting without the headache of managing servers. Your workflows run reliably, your data stays under your control, and you only pay for what you use.
