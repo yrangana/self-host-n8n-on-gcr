@@ -187,6 +187,15 @@ resource "google_cloud_run_v2_service" "n8n" {
         startup_cpu_boost = true
       }
       env {
+        name  = "N8N_PATH"
+        value = "/"
+      }
+      
+      env {
+        name  = "N8N_PORT"
+        value = "443"
+      }
+      env {
         name  = "N8N_PROTOCOL"
         value = "https"
       }
