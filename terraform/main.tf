@@ -88,8 +88,12 @@ resource "google_sql_user" "n8n_user" {
 # --- Secret Manager --- #
 # Generate a random password for the DB
 resource "random_password" "db_password" {
-  length  = 16
-  special = true
+  length      = 16
+  special     = true
+  min_upper   = 1
+  min_lower   = 1
+  min_numeric = 1
+  min_special = 1
   keepers = {
     db_instance = google_sql_database_instance.n8n_db_instance.name
     db_user     = var.db_user
