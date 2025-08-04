@@ -22,18 +22,6 @@ variable "db_user" {
   default     = "n8n-user"
 }
 
-variable "db_password" {
-  description = "Password for the Cloud SQL database user. Will be stored in Secret Manager."
-  type        = string
-  sensitive   = true
-}
-
-variable "n8n_encryption_key" {
-  description = "Encryption key for n8n. Will be stored in Secret Manager."
-  type        = string
-  sensitive   = true
-}
-
 variable "db_tier" {
   description = "Cloud SQL instance tier."
   type        = string
