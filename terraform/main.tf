@@ -90,6 +90,10 @@ resource "google_sql_user" "n8n_user" {
 resource "random_password" "db_password" {
   length  = 16
   special = true
+  keepers = {
+    db_instance = google_sql_database_instance.n8n_db_instance.name
+    db_user     = var.db_user
+  }
 }
 
 resource "google_secret_manager_secret" "db_password_secret" {
@@ -109,7 +113,7 @@ resource "google_secret_manager_secret_version" "db_password_secret_version" {
 # Secret Manager: n8n encryption key
 resource "random_password" "n8n_encryption_key" {
   length  = 32
-  special = true
+  special = false
 }
 resource "google_secret_manager_secret" "encryption_key_secret" {
   secret_id = "${var.cloud_run_service_name}-encryption-key"
