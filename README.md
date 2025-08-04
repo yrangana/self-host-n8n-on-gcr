@@ -4,6 +4,15 @@ So you want to run n8n without the monthly subscription fees, keep your data und
 
 This guide walks you through deploying n8n (that powerful workflow automation platform) on Google Cloud Run with PostgreSQL persistence. You'll end up with a fully functional system that scales automatically, connects to Google services via OAuth, and won't drain your wallet when idle.
 
+> **🚀 Quick Start Option**: Want to skip the manual setup? Jump to the [Terraform Deployment Option](#terraform-deployment-option) section for a streamlined, automated deployment. The step-by-step guide below is valuable for understanding what's happening under the hood, but Terraform will handle all the heavy lifting for you!
+
+## Table of Contents ##
+- [Quick Start with Terraform](#terraform-deployment-option)
+- [Manual Step-by-Step Guide](#step-1-set-up-your-google-cloud-project)
+- [Configuration](#step-8-configure-n8n-for-oauth-with-google-services)
+- [Updates & Maintenance](#keeping-n8n-updated-dont-be-that-person-running-year-old-software)
+- [Troubleshooting](#troubleshooting)
+
 ## Overview ##
 
 n8n is brilliant for automating all those tedious tasks you'd rather not do manually. This setup uses:
@@ -439,6 +448,8 @@ But for most personal automation needs, this setup offers enterprise-level capab
 
 ## Troubleshooting ##
 
+> **Note:** If you used Terraform for deployment, see the [Terraform Troubleshooting](#terraform-troubleshooting) section for deployment-specific issues.
+
 When things inevitably go sideways, here are the most common issues and how to fix them:
 
 1. Container Fails to Start:
@@ -470,7 +481,6 @@ When things inevitably go sideways, here are the most common issues and how to f
     * Use `WEBHOOK_URL` instead of `N8N_WEBHOOK_URL` for newer n8n versions
   
     * Add proxy hop configurations by including `N8N_PROXY_HOPS=1` as Cloud Run acts as a reverse proxy
-
 ---
 
 ## Terraform Deployment Option
@@ -478,6 +488,100 @@ When things inevitably go sideways, here are the most common issues and how to f
 Thanks to a generous contribution from the community, there is now a Terraform configuration available to automate the entire deployment process described in this guide. This Terraform setup provisions all necessary Google Cloud resources including Cloud Run, Cloud SQL, Secret Manager, IAM roles, and Artifact Registry.
 
 Using Terraform can simplify and speed up deployment, especially for those familiar with infrastructure as code. The Terraform files and a deployment script are included in the repository.
+
+### Quick Terraform Deployment
+
+Clone the repository and navigate to terraform directory
+
+```bash
+git clone <your-repo-url>
+cd <repo-name>/terraform
+```
+
+Initialize Terraform
+
+```tf
+terraform init
+```
+
+Review the planned changes
+
+```tf
+terraform plan
+```
+
+Deploy the infrastructure
+
+```tf
+terraform apply
+```
+
+### Terraform Troubleshooting ###
+
+If you're encountering issues with Terraform deployment, especially after a previous manual installation attempt or a failed Terraform run, you may need to clean up existing resources first.
+
+**Common scenarios requiring cleanup:**
+- You followed the manual steps before discovering the Terraform option
+- A previous Terraform deployment timed out or lost connectivity mid-build
+- You're seeing "resource already exists" errors
+
+**Clean up steps:**
+
+1. **Remove Terraform state files** (if you have a corrupted state):
+
+```bash
+cd terraform/
+rm -rf terraform.tfstate*
+rm -rf .terraform/
+```
+
+2. **Delete existing Google Cloud resources** via Console or CLI:
+
+**Artifact Registry:**
+
+```bash
+gcloud artifacts repositories delete n8n-repo --location=$REGION
+```
+
+**Cloud SQL Instance:**
+
+```bash
+gcloud sql instances delete n8n-db
+```
+
+**Secrets:**
+
+```bash
+gcloud secrets delete n8n-db-password
+gcloud secrets delete n8n-encryption-key
+```
+
+**Service Account:**
+
+```bash
+gcloud iam service-accounts delete n8n-service-account@$PROJECT_ID.iam.gserviceaccount.com
+```
+
+**Cloud Run Service:**
+
+```bash
+gcloud run services delete n8n --region=$REGION
+```
+
+3. **Alternative: Use Google Cloud Console**
+- Navigate to each service (Cloud Run, Cloud SQL, Secret Manager, IAM, Artifact Registry)
+- Identify and delete resources with names matching the Terraform configuration
+- This visual approach can be easier for identifying partially-created resources
+
+4. **Re-run Terraform:**
+
+```tf
+terraform init
+terraform plan # Verify no conflicts remain
+terraform apply
+```
+
+**Pro tip:** If you're unsure which resources were created, check the Terraform configuration files to see the exact resource names and types that will be provisioned.
 
 Huge thanks to [@alliecatowo](https://github.com/alliecatowo) for this valuable addition!
 
