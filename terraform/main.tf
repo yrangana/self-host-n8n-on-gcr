@@ -81,11 +81,25 @@ resource "google_sql_database" "n8n_database" {
 resource "google_sql_user" "n8n_user" {
   name     = var.db_user
   instance = google_sql_database_instance.n8n_db_instance.name
-  password = var.db_password
+  password = random_password.db_password.result
   project  = var.gcp_project_id
 }
 
 # --- Secret Manager --- #
+# Generate a random password for the DB
+resource "random_password" "db_password" {
+  length      = 16
+  special     = true
+  min_upper   = 1
+  min_lower   = 1
+  min_numeric = 1
+  min_special = 1
+  keepers = {
+    db_instance = google_sql_database_instance.n8n_db_instance.name
+    db_user     = var.db_user
+  }
+}
+
 resource "google_secret_manager_secret" "db_password_secret" {
   secret_id = "${var.cloud_run_service_name}-db-password"
   project   = var.gcp_project_id
@@ -97,9 +111,14 @@ resource "google_secret_manager_secret" "db_password_secret" {
 
 resource "google_secret_manager_secret_version" "db_password_secret_version" {
   secret      = google_secret_manager_secret.db_password_secret.id
-  secret_data = var.db_password
+  secret_data = random_password.db_password.result
 }
 
+# Secret Manager: n8n encryption key
+resource "random_password" "n8n_encryption_key" {
+  length  = 32
+  special = false
+}
 resource "google_secret_manager_secret" "encryption_key_secret" {
   secret_id = "${var.cloud_run_service_name}-encryption-key"
   project   = var.gcp_project_id
@@ -111,7 +130,7 @@ resource "google_secret_manager_secret" "encryption_key_secret" {
 
 resource "google_secret_manager_secret_version" "encryption_key_secret_version" {
   secret      = google_secret_manager_secret.encryption_key_secret.id
-  secret_data = var.n8n_encryption_key
+  secret_data = random_password.n8n_encryption_key.result
 }
 
 # --- IAM Service Account & Permissions --- #
