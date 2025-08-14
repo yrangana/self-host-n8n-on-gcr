@@ -3,6 +3,7 @@
 # Map Cloud Run's PORT to N8N_PORT if it exists
 if [ -n "$PORT" ]; then
   export N8N_PORT=$PORT
+  echo "Setting N8N_PORT to $PORT"
 fi
 
 # Print environment variables for debugging
