@@ -1,13 +1,114 @@
 # Self-Hosting n8n on Google Cloud Run: Complete Guide
 
-So you want to run n8n without the monthly subscription fees, keep your data under your own control, and avoid the headache of server maintenance? Google Cloud Run offers exactly that sweet spot - serverless deployment with per-use pricing. Let's build this thing properly.
+## Architecture Overview
 
-This guide walks you through deploying n8n (that powerful workflow automation platform) on Google Cloud Run with PostgreSQL persistence. You'll end up with a fully functional system that scales automatically, connects to Google services via OAuth, and won't drain your wallet when idle.
+```mermaid
+graph TD
+    subgraph "Google Cloud Platform"
+        subgraph "Cloud Run"
+            n8n["n8n Container"];
+        end
 
-> **🚀 Quick Start Option**: Want to skip the manual setup? Jump to the [Terraform Deployment Option](#terraform-deployment-option) section for a streamlined, automated deployment. The step-by-step guide below is valuable for understanding what's happening under the hood, but Terraform will handle all the heavy lifting for you!
+        subgraph "Cloud SQL"
+            db[("PostgreSQL DB")];
+        end
+
+        subgraph "Secret Manager"
+            secrets["DB Password<br>Encryption Keys"];
+        end
+
+        subgraph "Artifact Registry"
+            docker["n8n Docker Image"];
+        end
+
+        n8n -->|"Unix Socket<br>Connection"| db;
+        n8n -->|"Access"| secrets;
+        docker -->|"Deploy"| n8n;
+    end
+
+    users["External Users<br>- Web UI Access<br>- Workflow Management"] -->|"HTTPS"| n8n;
+    n8n -->|"API Calls"| ext["External Services<br>- Google Sheets<br>- Email<br>- Third-party APIs"];
+```
+
+### Architecture Components
+
+#### Google Cloud Platform Resources
+
+1. **Cloud Run**
+
+   - Hosts the n8n container
+   - Scales to zero when not in use (cost-efficient)
+   - Handles HTTPS traffic
+   - Connects to Cloud SQL via Unix socket
+
+2. **Cloud SQL**
+
+   - PostgreSQL 15 database
+   - Stores workflows, credentials, executions
+   - db-f1-micro tier (cost-efficient)
+   - Persistent storage
+
+3. **Secret Manager**
+
+   - Securely stores sensitive information
+   - Database password
+   - n8n encryption key
+
+4. **Artifact Registry**
+   - Stores the custom n8n Docker image
+   - Enables versioning and deployment
+
+#### External Components
+
+1. **User Access**
+
+   - Web browser interface
+   - Workflow creation and management
+   - OAuth authentication for Google services
+
+2. **External Services**
+   - Integration with Google services (Sheets, Drive)
+   - Other third-party services via n8n nodes
+
+#### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User as User
+    participant n8n as n8n (Cloud Run)
+    participant DB as PostgreSQL (Cloud SQL)
+    participant SM as Secret Manager
+    participant Ext as External Services
+
+    User->>n8n: Access web interface (HTTPS)
+    n8n->>SM: Retrieve secrets
+    n8n->>DB: Connect via Unix socket
+    n8n->>DB: Store/retrieve workflows
+
+    alt Workflow Execution
+        User->>n8n: Trigger workflow
+        n8n->>DB: Get workflow definition
+        n8n->>Ext: API calls with OAuth
+        Ext-->>n8n: Response data
+        n8n->>DB: Store execution results
+        n8n-->>User: Display results
+    end
+```
+
+1. User requests are sent to Cloud Run over HTTPS
+2. n8n container processes requests and connects to PostgreSQL for data
+3. Workflows execute within the container or via task runners
+4. External service connections use OAuth credentials stored in n8n
+
+This guide documents a production-ready n8n deployment on Google Cloud Run with PostgreSQL persistence.
+
+Following this guide will give you a fully functional system that scales automatically, connects to Google services via OAuth, and won't drain your wallet when idle.
+
+> **🚀 Quick Start Option**: Want to skip the manual setup? Jump to the [Terraform Deployment Option](#terraform-deployment-option) section for a streamlined, automated deployment. Terraform can handle all the heavy lifting for you!
 
 ## Table of Contents
 
+- [Architecture Overview](#architecture-overview)
 - [Quick Start with Terraform](#terraform-deployment-option)
 - [Manual Step-by-Step Guide](#step-1-set-up-your-google-cloud-project)
 - [Configuration](#step-8-configure-n8n-for-oauth-with-google-services)
@@ -15,8 +116,6 @@ This guide walks you through deploying n8n (that powerful workflow automation pl
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
-
-n8n is brilliant for automating all those tedious tasks you'd rather not do manually. This setup uses:
 
 - Google Cloud Run for hosting the application (pay only when it runs)
 
@@ -389,7 +488,7 @@ This means you generally don't need to worry about database changes. However, it
 
 - Test upgrades on a staging environment if you have critical workflows
 
-I typically take a snapshot of my Cloud SQL instance before significant version jumps, just in case.
+Recommended: take a snapshot of your Cloud SQL instance before significant version jumps, just in case.
 
 ### Updating Environment Variables
 
