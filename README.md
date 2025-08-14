@@ -143,7 +143,7 @@ Now for the database. We'll use the smallest instance type to keep costs reasona
 ```bash
 # Creating a Cloud SQL instance (lowest cost tier)
 gcloud sql instances create n8n-db \
-    --database-version=POSTGRES_13 \
+    --database-version=POSTGRES_15 \
     --tier=db-f1-micro \
     --region=$REGION \
     --root-password=$N8NDBPASS \
